@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# Notebook/IDE
+.ipynb_checkpoints/
+.vscode/
+
+# データ（例）
+data/
+*.parquet
+
+# NeuralForecast 実行物
+nf_auto_runs/**/models/
+nf_auto_runs/**/plots/
+
+# tables は CSV だけ許可（必要な集計物だけ残す）
+nf_auto_runs/**/tables/*
+!nf_auto_runs/**/tables/metrics.csv
+!nf_auto_runs/**/tables/cv_predictions.csv
