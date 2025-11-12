@@ -19,3 +19,4 @@ nf_auto_runs/**/plots/
 nf_auto_runs/**/tables/*
 !nf_auto_runs/**/tables/metrics.csv
 !nf_auto_runs/**/tables/cv_predictions.csv
+nf_auto_runs/**/models/
