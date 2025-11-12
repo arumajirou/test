@@ -1,0 +1,34 @@
+freq: null           # 推定に任せる: D/W/M など
+h: 28                # 将来ホライゾン（futr用）
+
+calendar:
+  time_features: [dow, dom, woy, month, quarter, year]
+  fourier:
+    - {period: 7, k: 3}
+    - {period: 365, k: 5}
+
+lag_features:
+  lags: [1,7,14,28]
+  roll:
+    - {window: 7, stats: [mean, std]}
+    - {window: 28, stats: [mean]}
+  diffs: [1]
+  seasonal_diff: null
+  pct_change: []
+
+anomaly:
+  mode: light
+  hampel: {windows: [28], tau: 3.5}
+
+io:
+  schema: null          # 例: "public"
+  table_input: null     # 既定: db_config.TABLE_PREFIX + "loto_final"
+  table_hist: null      # 既定: db_config.TABLE_PREFIX + "features_hist"
+  table_futr: null      # 既定: db_config.TABLE_PREFIX + "features_futr"
+  write_mode: replace   # replace|append
+  chunksize: 50000
+
+parallel:
+  engine: none          # none|multiprocessing
+  num_workers: auto     # auto or int
+  batch_rows: 1000000

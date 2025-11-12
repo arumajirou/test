@@ -1,0 +1,22 @@
+# Minimal requirements for DB-driven feature generation
+psycopg2-binary
+SQLAlchemy>=2.0
+pandas>=2.0
+numpy>=1.23
+PyYAML>=6.0
+
+# Optional (uncomment as needed)
+# polars
+# stumpy
+# numba
+# statsmodels
+# ruptures
+# scikit-learn
+# tsfresh
+# tsfel
+# ta
+# TA-Lib
+# tslearn
+# pyts
+# torch
+# khiva
