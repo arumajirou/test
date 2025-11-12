@@ -1,0 +1,398 @@
+# =========================================================================
+# NeuralForecast AutoModels デフォルト設定
+# =========================================================================
+#
+# このファイルは、AutoModelsフレームワーク全体のデフォルト設定を定義します。
+# - MLflow統合設定
+# - Optuna最適化設定
+# - Ray Tune設定
+# - 検索アルゴリズム設定
+# - ロギング設定
+# - 検証設定
+
+# =========================================================================
+# MLflow統合設定
+# =========================================================================
+
+mlflow:
+  # トラッキングサーバー設定
+  tracking_uri: "file:./mlruns"  # ローカル: "file:./mlruns" | リモート: "http://mlflow-server:5000" | Databricks: "databricks"
+  
+  # デフォルト実験設定
+  default_experiment_name: "neuralforecast_auto"
+  
+  # 実験レベルのタグ
+  experiment_tags:
+    project: "time_series_forecasting"
+    framework: "neuralforecast"
+    version: "1.0.0"
+  
+  # Runレベルのデフォルトタグ
+  run_tags:
+    environment: "development"  # development, staging, production
+    
+  # 自動ログ設定
+  auto_logging:
+    enabled: true
+    log_models: true  # モデルを自動保存
+    log_params: true  # パラメータを自動ログ
+    log_metrics: true  # メトリクスを自動ログ
+    log_artifacts: true  # アーティファクトを自動保存
+    
+  # モデル保存設定
+  model_registry:
+    enabled: false  # Model Registryを使用するか
+    default_stage: "None"  # None, Staging, Production, Archived
+    
+  # メトリクス保存設定
+  metrics:
+    log_interval: 10  # メトリクスをログする間隔（エポック数）
+    track_intermediate_values: true  # 中間値をトラッキング
+
+
+# =========================================================================
+# Optuna最適化設定
+# =========================================================================
+
+optuna:
+  # デフォルトサンプラー設定
+  sampler:
+    default: "TPESampler"  # TPESampler, CmaEsSampler, RandomSampler, GridSampler
+    
+    # TPESampler設定
+    tpe:
+      n_startup_trials: 10  # ランダムサンプリング期間
+      n_ei_candidates: 24  # Expected Improvementの候補数
+      multivariate: false  # 多変量TPEを使用するか
+      
+    # CMA-ES設定
+    cmaes:
+      n_startup_trials: 10
+      sigma0: 0.1  # 初期標準偏差
+      
+    # ランダムサンプラー設定
+    random:
+      seed: null  # 乱数シード（nullの場合はランダム）
+  
+  # プルーナー設定
+  pruner:
+    enabled: true  # プルーニングを使用するか
+    default: "MedianPruner"  # MedianPruner, HyperbandPruner, SuccessiveHalvingPruner
+    
+    # MedianPruner設定
+    median:
+      n_startup_trials: 5  # プルーニング開始までの試行回数
+      n_warmup_steps: 10  # プルーニング評価開始までのステップ数
+      interval_steps: 1  # プルーニング評価の間隔
+      
+    # HyperbandPruner設定
+    hyperband:
+      min_resource: 5  # 最小リソース
+      max_resource: 100  # 最大リソース
+      reduction_factor: 3  # リソース削減率
+      
+    # SuccessiveHalvingPruner設定
+    successive_halving:
+      min_resource: 5
+      reduction_factor: 4
+  
+  # 最適化設定
+  optimization:
+    direction: "minimize"  # minimize or maximize
+    n_trials: 50  # デフォルト試行回数
+    timeout: null  # タイムアウト（秒、nullの場合は無制限）
+    n_jobs: 1  # 並列実行数（-1で全コア使用）
+    catch_exceptions: true  # 例外を捕捉して続行するか
+    
+  # データベース設定
+  storage:
+    url: null  # "sqlite:///optuna.db" | "postgresql://user:pass@host/db" | null (in-memory)
+    engine_kwargs: {}
+    
+  # Study設定
+  study:
+    study_name: null  # study名（nullの場合は自動生成）
+    load_if_exists: true  # 既存studyをロードするか
+
+
+# =========================================================================
+# Ray Tune設定
+# =========================================================================
+
+ray:
+  # Ray初期化設定
+  init:
+    num_cpus: null  # 使用するCPU数（nullの場合は自動検出）
+    num_gpus: null  # 使用するGPU数（nullの場合は自動検出）
+    log_to_driver: true  # ドライバーにログを出力するか
+    
+  # デフォルト検索アルゴリズム
+  search_algorithm:
+    default: "OptunaSearch"  # OptunaSearch, HyperOptSearch, BayesOptSearch, BasicVariantGenerator
+    
+    # OptunaSearch設定
+    optuna:
+      metric: "valid_loss"
+      mode: "min"
+      
+    # HyperOptSearch設定
+    hyperopt:
+      n_initial_points: 10
+      
+    # BayesOptSearch設定
+    bayesopt:
+      random_search_steps: 5
+  
+  # スケジューラー設定
+  scheduler:
+    default: "ASHAScheduler"  # ASHAScheduler, HyperBandScheduler, MedianStoppingRule
+    
+    # ASHAScheduler設定
+    asha:
+      max_t: 100  # 最大エポック数
+      grace_period: 10  # 最小実行エポック数
+      reduction_factor: 3  # リソース削減率
+      brackets: 1  # ブラケット数
+      
+    # HyperBandScheduler設定
+    hyperband:
+      max_t: 100
+      reduction_factor: 3
+      
+    # MedianStoppingRule設定
+    median_stopping:
+      grace_period: 10
+      min_samples_required: 3
+  
+  # 実行設定
+  tune_config:
+    num_samples: 50  # 試行回数
+    max_concurrent_trials: null  # 同時実行数（nullの場合は制限なし）
+    reuse_actors: true  # Actorを再利用するか
+    
+  # チェックポイント設定
+  checkpoint:
+    enabled: true
+    frequency: 10  # チェックポイント保存頻度（エポック数）
+    num_to_keep: 3  # 保存するチェックポイント数
+
+
+# =========================================================================
+# 検索アルゴリズム自動選択設定
+# =========================================================================
+
+search_algorithm_selector:
+  # バックエンド設定
+  backend: "optuna"  # optuna or ray
+  
+  # 複雑度推定設定
+  search_complexity:
+    low_threshold: 5  # 低複雑度の閾値（パラメータ数）
+    medium_threshold: 15  # 中複雑度の閾値（パラメータ数）
+    
+  # データセットサイズ閾値
+  dataset_size:
+    small_threshold: 1000  # 小規模データの閾値（行数）
+    large_threshold: 100000  # 大規模データの閾値（行数）
+  
+  # 推奨試行回数設定
+  recommended_samples:
+    # (search_complexity, model_complexity): num_samples
+    low_simple: 10
+    low_moderate: 15
+    low_complex: 20
+    medium_simple: 20
+    medium_moderate: 30
+    medium_complex: 50
+    high_simple: 50
+    high_moderate: 100
+    high_complex: 150
+    
+    # データセットサイズによる調整係数
+    small_dataset_factor: 0.7
+    large_dataset_factor: 1.3
+  
+  # 時間予算による推定（分/試行）
+  estimated_time_per_trial:
+    small_simple: 2
+    small_moderate: 5
+    small_complex: 10
+    medium_simple: 5
+    medium_moderate: 15
+    medium_complex: 30
+    large_simple: 15
+    large_moderate: 45
+    large_complex: 90
+
+
+# =========================================================================
+# ロギング設定
+# =========================================================================
+
+logging:
+  # ログレベル
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # ログフォーマット
+  format: "json"  # json or text
+  
+  # JSONログフィールド
+  json_fields:
+    - "timestamp"
+    - "level"
+    - "logger"
+    - "message"
+    - "module"
+    - "function"
+    - "line"
+  
+  # 出力先設定
+  handlers:
+    console:
+      enabled: true
+      level: "INFO"
+      
+    file:
+      enabled: true
+      level: "DEBUG"
+      filename: "logs/neuralforecast_auto.log"
+      max_bytes: 10485760  # 10MB
+      backup_count: 5
+      
+    mlflow:
+      enabled: false  # MLflowへのログ送信
+      level: "INFO"
+  
+  # モジュール別ログレベル
+  loggers:
+    neuralforecast: "INFO"
+    optuna: "WARNING"
+    ray: "WARNING"
+    mlflow: "WARNING"
+
+
+# =========================================================================
+# 検証設定
+# =========================================================================
+
+validation:
+  # クロスバリデーション設定
+  cross_validation:
+    enabled: false
+    n_windows: 3  # CV分割数
+    
+  # ホールドアウト検証設定
+  holdout:
+    enabled: true
+    test_size: 0.2  # テストサイズ比率
+    
+  # メトリクス設定
+  metrics:
+    primary: "mae"  # 主要メトリクス: mae, mse, rmse, mape, smape
+    additional:  # 追加メトリクス
+      - "mse"
+      - "rmse"
+      - "mape"
+    
+  # 早期停止設定
+  early_stopping:
+    enabled: true
+    patience: 10  # 改善しないエポック数
+    min_delta: 0.0001  # 最小改善量
+    monitor: "valid_loss"  # 監視するメトリクス
+
+
+# =========================================================================
+# モデル学習設定
+# =========================================================================
+
+training:
+  # デフォルトエポック数
+  max_epochs: 100
+  
+  # バッチサイズ
+  batch_size: 32
+  
+  # 学習率
+  learning_rate: 0.001
+  
+  # オプティマイザー
+  optimizer: "adam"  # adam, sgd, adamw
+  
+  # 損失関数
+  loss: "mae"  # mae, mse, huber, quantile
+  
+  # GPU設定
+  accelerator: "auto"  # auto, gpu, cpu
+  devices: 1  # GPU/CPU数
+  
+  # チェックポイント設定
+  checkpoint:
+    save_top_k: 3  # 保存するベストモデル数
+    monitor: "valid_loss"
+    mode: "min"
+
+
+# =========================================================================
+# データ処理設定
+# =========================================================================
+
+data_processing:
+  # スケーリング設定
+  scaler:
+    default: "identity"  # identity, standard, robust, minmax
+    
+  # 欠損値処理
+  missing_values:
+    strategy: "forward_fill"  # forward_fill, backward_fill, interpolate, drop
+    
+  # 外れ値処理
+  outliers:
+    enabled: false
+    method: "iqr"  # iqr, zscore
+    threshold: 3.0
+
+
+# =========================================================================
+# 実験管理設定
+# =========================================================================
+
+experiment:
+  # 実験名生成
+  auto_naming:
+    enabled: true
+    pattern: "{model}_{timestamp}"  # model, timestamp, user, dataset
+    
+  # タグ管理
+  auto_tagging:
+    enabled: true
+    include_git_info: false  # Gitコミット情報を含めるか
+    include_environment: true  # 環境情報を含めるか
+    
+  # 結果保存
+  results:
+    save_predictions: true  # 予測結果を保存するか
+    save_checkpoints: true  # チェックポイントを保存するか
+    output_dir: "outputs"  # 出力ディレクトリ
+
+
+# =========================================================================
+# システム設定
+# =========================================================================
+
+system:
+  # 乱数シード
+  random_seed: 42
+  
+  # 並列処理
+  n_jobs: -1  # -1で全コア使用
+  
+  # メモリ管理
+  memory:
+    max_memory_gb: null  # 最大メモリ使用量（nullの場合は制限なし）
+    
+  # キャッシュ設定
+  cache:
+    enabled: true
+    cache_dir: ".cache"
+    max_size_gb: 10

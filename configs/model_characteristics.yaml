@@ -1,0 +1,878 @@
+# =========================================================================
+# NeuralForecast AutoModels 特性定義
+# =========================================================================
+# 
+# このファイルは、全AutoModelsの探索空間特性、パラメータ設定、
+# 最適化アルゴリズムの推奨設定を定義します。
+#
+# 各モデルの特性は、SearchAlgorithmSelectorが最適な検索アルゴリズムを
+# 選択するための判断材料として使用されます。
+
+# =========================================================================
+# Enumeration Definitions
+# =========================================================================
+
+optimization_types:
+  continuous: "continuous"          # 連続空間のみ
+  discrete: "discrete"              # 離散空間のみ
+  mixed: "mixed"                    # 連続+離散の混合
+  multi_objective: "multi_objective"  # 多目的最適化
+
+exogenous_support_types:
+  none: "none"           # 外生変数非対応
+  futr_only: "futr_only"  # 未来外生のみ
+  hist_only: "hist_only"  # 履歴外生のみ
+  stat_only: "stat_only"  # 静的外生のみ
+  full: "full"           # 全種類対応
+
+
+# =========================================================================
+# モデル特性定義
+# =========================================================================
+
+models:
+  
+  # --- Transformer系 ---
+  
+  AutoAutoformer:
+    model_name: "AutoAutoformer"
+    base_model_name: "Autoformer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 15000
+    
+    # ドロップアウト設定
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.05
+    
+    # スケーラー設定
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    # 外生変数サポート
+    exogenous_support: "full"
+    
+    # 早期停止設定
+    early_stop_default: -1  # -1は無効
+    
+    # Backend/Pruner設定
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    # 備考
+    notes: "Decomposition-based transformer, good with trend/seasonality"
+  
+  AutoTFT:
+    model_name: "AutoTFT"
+    base_model_name: "TFT"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 20000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Temporal Fusion Transformer, excellent with exogenous variables"
+  
+  AutoPatchTST:
+    model_name: "AutoPatchTST"
+    base_model_name: "PatchTST"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 12000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.2
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "none"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Patch-based transformer, efficient for long sequences"
+  
+  AutoVanillaTransformer:
+    model_name: "AutoVanillaTransformer"
+    base_model_name: "VanillaTransformer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 10000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Standard transformer architecture for time series"
+  
+  AutoInformer:
+    model_name: "AutoInformer"
+    base_model_name: "Informer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 15000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.05
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "ProbSparse attention for long-range dependencies"
+  
+  AutoFEDformer:
+    model_name: "AutoFEDformer"
+    base_model_name: "FEDformer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 15000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.05
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Frequency Enhanced Decomposition Transformer"
+  
+  AutoiTransformer:
+    model_name: "AutoiTransformer"
+    base_model_name: "iTransformer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 12000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Inverted transformer architecture"
+  
+  
+  # --- RNN系 ---
+  
+  AutoRNN:
+    model_name: "AutoRNN"
+    base_model_name: "RNN"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 5000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Basic RNN architecture"
+  
+  AutoLSTM:
+    model_name: "AutoLSTM"
+    base_model_name: "LSTM"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 5000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Long Short-Term Memory network"
+  
+  AutoGRU:
+    model_name: "AutoGRU"
+    base_model_name: "GRU"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 5000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Gated Recurrent Unit"
+  
+  AutoTCN:
+    model_name: "AutoTCN"
+    base_model_name: "TCN"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 6000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.2
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Temporal Convolutional Network"
+  
+  AutoDeepAR:
+    model_name: "AutoDeepAR"
+    base_model_name: "DeepAR"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 7000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Probabilistic forecasting with RNN, outputs distributions"
+  
+  
+  # --- MLP・Linear系 ---
+  
+  AutoMLP:
+    model_name: "AutoMLP"
+    base_model_name: "MLP"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 4000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Multi-Layer Perceptron baseline"
+  
+  AutoDilatedRNN:
+    model_name: "AutoDilatedRNN"
+    base_model_name: "DilatedRNN"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 6000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "RNN with dilated connections for long-range patterns"
+  
+  AutoDLinear:
+    model_name: "AutoDLinear"
+    base_model_name: "DLinear"
+    has_continuous_params: true
+    has_discrete_params: false  # 主に連続空間
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 3000
+    
+    dropout_supported: false
+    dropout_key: null
+    dropout_default: null
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Simple decomposition + linear, very fast"
+  
+  AutoNLinear:
+    model_name: "AutoNLinear"
+    base_model_name: "NLinear"
+    has_continuous_params: true
+    has_discrete_params: false
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 2000
+    
+    dropout_supported: false
+    dropout_key: null
+    dropout_default: null
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Normalized linear, extremely simple baseline"
+  
+  
+  # --- NBEATS系 ---
+  
+  AutoNBEATS:
+    model_name: "AutoNBEATS"
+    base_model_name: "NBEATS"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 10000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "none"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Neural basis expansion, interpretable stacks"
+  
+  AutoNBEATSx:
+    model_name: "AutoNBEATSx"
+    base_model_name: "NBEATSx"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 12000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "NBEATS with exogenous variables support"
+  
+  AutoNHITS:
+    model_name: "AutoNHITS"
+    base_model_name: "NHITS"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 10000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Hierarchical interpolation for time series"
+  
+  
+  # --- その他特殊系 ---
+  
+  AutoDeepNPTS:
+    model_name: "AutoDeepNPTS"
+    base_model_name: "DeepNPTS"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 8000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "standard"  # 特殊: standardがデフォルト
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Non-parametric time series model"
+  
+  AutoTiDE:
+    model_name: "AutoTiDE"
+    base_model_name: "TiDE"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 8000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.3
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Time series Dense Encoder, efficient MLP-based model"
+  
+  AutoTimeMixer:
+    model_name: "AutoTimeMixer"
+    base_model_name: "TimeMixer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 10000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Multivariate mixing with decomposition"
+  
+  AutoRMoK:
+    model_name: "AutoRMoK"
+    base_model_name: "RMoK"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 9000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Recurrent Mixture of Kernels"
+  
+  AutoStemGNN:
+    model_name: "AutoStemGNN"
+    base_model_name: "StemGNN"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 11000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.5
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Spectral Temporal GNN, good for multivariate series"
+  
+  AutoMLPMultivariate:
+    model_name: "AutoMLPMultivariate"
+    base_model_name: "MLPMultivariate"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 6000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.0
+    
+    default_scaler: "standard"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "MLP for multivariate forecasting"
+  
+  
+  # --- プレースホルダー（今後追加される可能性のあるモデル） ---
+  
+  AutoTimeXer:
+    model_name: "AutoTimeXer"
+    base_model_name: "TimeXer"
+    has_continuous_params: true
+    has_discrete_params: true
+    has_categorical_params: true
+    supports_multi_objective: false
+    typical_search_space_size: 10000
+    
+    dropout_supported: true
+    dropout_key: "dropout"
+    dropout_default: 0.1
+    
+    default_scaler: "identity"
+    scaler_choices:
+      - "identity"
+      - "standard"
+      - "robust"
+      - "minmax"
+    
+    exogenous_support: "full"
+    early_stop_default: -1
+    
+    backend_choices:
+      - "ray"
+      - "optuna"
+    pruner_default_enabled_optuna: true
+    
+    notes: "Cross-series attention model"
+
+
+# =========================================================================
+# モデル複雑度分類
+# =========================================================================
+
+model_complexity:
+  # SIMPLE: MLP, Linear等の単純なモデル
+  simple:
+    - "AutoMLP"
+    - "AutoNLinear"
+    - "AutoDLinear"
+  
+  # MODERATE: NHITS, TCN, GRU等の中程度のモデル
+  moderate:
+    - "AutoNHITS"
+    - "AutoNBEATS"
+    - "AutoNBEATSx"
+    - "AutoTCN"
+    - "AutoGRU"
+    - "AutoLSTM"
+    - "AutoRNN"
+    - "AutoDeepAR"
+    - "AutoDilatedRNN"
+    - "AutoTiDE"
+    - "AutoRMoK"
+    - "AutoMLPMultivariate"
+  
+  # COMPLEX: Transformer系等の複雑なモデル
+  complex:
+    - "AutoTFT"
+    - "AutoAutoformer"
+    - "AutoPatchTST"
+    - "AutoVanillaTransformer"
+    - "AutoInformer"
+    - "AutoFEDformer"
+    - "AutoiTransformer"
+    - "AutoDeepNPTS"
+    - "AutoTimeMixer"
+    - "AutoStemGNN"
+    - "AutoTimeXer"
