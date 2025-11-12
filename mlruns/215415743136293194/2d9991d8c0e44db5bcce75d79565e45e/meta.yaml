@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/test/mlruns/215415743136293194/2d9991d8c0e44db5bcce75d79565e45e/artifacts
+end_time: 1762924555513
+entry_point_name: ''
+experiment_id: '215415743136293194'
+lifecycle_stage: active
+run_id: 2d9991d8c0e44db5bcce75d79565e45e
+run_name: probe
+run_uuid: 2d9991d8c0e44db5bcce75d79565e45e
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762924555474
+status: 3
+tags: []
+user_id: hashimoto.ryohei

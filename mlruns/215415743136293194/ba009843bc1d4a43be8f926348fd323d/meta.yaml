@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/test/mlruns/215415743136293194/ba009843bc1d4a43be8f926348fd323d/artifacts
+end_time: 1762926941472
+entry_point_name: ''
+experiment_id: '215415743136293194'
+lifecycle_stage: active
+run_id: ba009843bc1d4a43be8f926348fd323d
+run_name: smoke_optuna
+run_uuid: ba009843bc1d4a43be8f926348fd323d
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762926936189
+status: 4
+tags: []
+user_id: hashimoto.ryohei

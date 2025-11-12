@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/test/mlruns/215415743136293194/2688bba016494fa5893ff920910443fa/artifacts
+end_time: 1762924881385
+entry_point_name: ''
+experiment_id: '215415743136293194'
+lifecycle_stage: active
+run_id: 2688bba016494fa5893ff920910443fa
+run_name: smoke_ray
+run_uuid: 2688bba016494fa5893ff920910443fa
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762924876560
+status: 4
+tags: []
+user_id: hashimoto.ryohei

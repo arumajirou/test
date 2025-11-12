@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/test/mlruns/929142664854178861/4f33addcb732456fb6b97354082e32ec/artifacts
+end_time: 1762925211675
+entry_point_name: ''
+experiment_id: '929142664854178861'
+lifecycle_stage: active
+run_id: 4f33addcb732456fb6b97354082e32ec
+run_name: NHITS_auto_optimization
+run_uuid: 4f33addcb732456fb6b97354082e32ec
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762925211628
+status: 4
+tags: []
+user_id: hashimoto.ryohei

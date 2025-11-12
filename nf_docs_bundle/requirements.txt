@@ -1,0 +1,17 @@
+# Core
+pandas>=2.0.0
+numpy>=1.24.0
+pYYaml>=6.0.0
+
+# Forecasting / Training
+neuralforecast>=1.6.0
+pytorch-lightning>=2.4.0
+
+# Optimization
+optuna>=3.6.0
+
+# Experiment Tracking
+mlflow>=2.14.0
+
+# Ray Tune (Linux 推奨。Windows では既知問題あり)
+ray[tune]>=2.31.0; sys_platform != "win32"

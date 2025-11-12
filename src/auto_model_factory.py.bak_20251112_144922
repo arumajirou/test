@@ -1,0 +1,633 @@
+
+# src/auto_model_factory.py
+"""
+Auto model factory for NeuralForecast with Optuna/Ray backends and MLflow logging.
+This version fixes: (1) stray syntax issues, (2) n_series only used for logging,
+(3) Optuna backend expects a config(trial)->dict function, (4) unknown kwargs
+are filtered by inspecting the chosen Auto* class constructor.
+"""
+from typing import Dict, Any, Optional, List, Callable
+from dataclasses import dataclass, field
+import logging
+import time
+from datetime import datetime
+import json
+
+import pandas as pd
+
+from .validation import (
+    ConfigValidator,
+    DataValidator,
+    validate_all,
+    print_validation_results,
+)
+from .search_algorithm_selector import (
+    SearchAlgorithmSelector,
+    ModelComplexity,
+    DatasetSize,
+    SearchComplexity,
+    recommend_num_samples,
+)
+
+logger = logging.getLogger(__name__)
+
+# --- helper: filter unknown kwargs based on Auto* __init__ signature ---
+def _instantiate_model(AutoModelClass, *args, **kwargs):
+    import inspect
+    sig = inspect.signature(AutoModelClass.__init__)
+    allowed = {k: v for k, v in kwargs.items() if k in sig.parameters}
+    return AutoModelClass(*args, **allowed)
+# ----------------------------------------------------------------------
+
+@dataclass
+class ModelCharacteristics:
+    name: str
+    complexity: ModelComplexity
+    recommended_input_size_range: tuple = (7, 24)
+    supports_exogenous: bool = True
+    supports_static: bool = False
+    typical_training_time_minutes: float = 10.0
+    memory_footprint_mb: float = 500.0
+    default_config: Dict[str, Any] = field(default_factory=dict)
+
+    def __repr__(self):
+        return f"ModelCharacteristics(name={self.name}, complexity={self.complexity.value})"
+
+
+# Model catalog (simple defaults; tune space is created later)
+MODEL_CATALOG = {
+    "MLP": ModelCharacteristics(
+        name="MLP",
+        complexity=ModelComplexity.SIMPLE,
+        recommended_input_size_range=(7, 14),
+        typical_training_time_minutes=5.0,
+        memory_footprint_mb=300.0,
+    ),
+    "NHITS": ModelCharacteristics(
+        name="NHITS",
+        complexity=ModelComplexity.MODERATE,
+        recommended_input_size_range=(14, 28),
+        typical_training_time_minutes=10.0,
+        memory_footprint_mb=800.0,
+    ),
+    "NBEATS": ModelCharacteristics(
+        name="NBEATS",
+        complexity=ModelComplexity.MODERATE,
+        recommended_input_size_range=(14, 28),
+        typical_training_time_minutes=10.0,
+        memory_footprint_mb=800.0,
+    ),
+    "DLinear": ModelCharacteristics(
+        name="DLinear",
+        complexity=ModelComplexity.MODERATE,
+        recommended_input_size_range=(24, 96),
+        typical_training_time_minutes=8.0,
+        memory_footprint_mb=400.0,
+    ),
+    "TSMixer": ModelCharacteristics(
+        name="TSMixer",
+        complexity=ModelComplexity.MODERATE,
+        recommended_input_size_range=(24, 96),
+        supports_static=True,
+        typical_training_time_minutes=15.0,
+        memory_footprint_mb=1000.0,
+    ),
+    "TFT": ModelCharacteristics(
+        name="TFT",
+        complexity=ModelComplexity.COMPLEX,
+        recommended_input_size_range=(24, 168),
+        supports_static=True,
+        typical_training_time_minutes=30.0,
+        memory_footprint_mb=2000.0,
+    ),
+    "Transformer": ModelCharacteristics(
+        name="Transformer",
+        complexity=ModelComplexity.COMPLEX,
+        recommended_input_size_range=(24, 96),
+        typical_training_time_minutes=25.0,
+        memory_footprint_mb=1500.0,
+    ),
+    "PatchTST": ModelCharacteristics(
+        name="PatchTST",
+        complexity=ModelComplexity.COMPLEX,
+        recommended_input_size_range=(96, 512),
+        typical_training_time_minutes=20.0,
+        memory_footprint_mb=1200.0,
+    ),
+}
+
+
+@dataclass
+class OptimizationConfig:
+    # backend & resources
+    backend: str = "optuna"
+    num_samples: Optional[int] = None
+    cpus: int = 4
+    gpus: int = 0
+
+    # data splits (not used directly here but kept for future use)
+    validation_split: float = 0.2
+    test_split: float = 0.1
+
+    # MLflow
+    use_mlflow: bool = True
+    mlflow_tracking_uri: Optional[str] = None
+    mlflow_experiment_name: Optional[str] = None
+
+    # search options
+    use_pruning: bool = True
+    random_seed: Optional[int] = 42
+    time_budget_hours: Optional[float] = None
+
+    # misc
+    verbose: bool = True
+    callbacks: Optional[List[Callable]] = None
+
+    # validation
+    strict_validation: bool = False
+    auto_correct: bool = True
+
+
+class AutoModelFactory:
+    """Create and optimize a NeuralForecast Auto* model."""
+
+    def __init__(
+        self,
+        model_name: str,
+        h: int,
+        optimization_config: Optional[OptimizationConfig] = None,
+    ):
+        self.model_name = model_name
+        self.h = h
+        self.config = optimization_config or OptimizationConfig()
+
+        # model characteristics
+        if model_name not in MODEL_CATALOG:
+            logger.warning("Model '%s' not in catalog. Using default characteristics.", model_name)
+            self.model_char = ModelCharacteristics(
+                name=model_name, complexity=ModelComplexity.MODERATE
+            )
+        else:
+            self.model_char = MODEL_CATALOG[model_name]
+
+        logger.info("Initialized AutoModelFactory for %s", model_name)
+        logger.info("Model characteristics: %s", self.model_char)
+
+        # validators and search selector
+        self.config_validator = ConfigValidator(strict_mode=self.config.strict_validation)
+        self.data_validator = DataValidator()
+        self.algorithm_selector = SearchAlgorithmSelector(backend=self.config.backend)
+
+        # MLflow
+        if self.config.use_mlflow:
+            self._setup_mlflow()
+
+        self.optimization_history = []
+
+    def _setup_mlflow(self):
+        """Configure MLflow tracking/experiment."""
+        try:
+            import mlflow
+
+            if self.config.mlflow_tracking_uri:
+                mlflow.set_tracking_uri(self.config.mlflow_tracking_uri)
+
+            if self.config.mlflow_experiment_name:
+                experiment_name = self.config.mlflow_experiment_name
+            else:
+                experiment_name = f"neuralforecast_{self.model_name}_{datetime.now().strftime('%Y%m%d')}"
+
+            mlflow.set_experiment(experiment_name)
+
+            logger.info("MLflow tracking URI: %s", mlflow.get_tracking_uri())
+            exp_obj = mlflow.get_experiment_by_name(experiment_name)
+            logger.info("MLflow experiment: %s", exp_obj.name if exp_obj else experiment_name)
+        except Exception as e:
+            logger.error("Failed to setup MLflow: %s", e)
+            self.config.use_mlflow = False
+
+    def create_auto_model(
+        self,
+        dataset: pd.DataFrame,
+        config: Optional[Dict[str, Any]] = None,
+        loss: Optional[Any] = None,
+        valid_loss: Optional[Any] = None,
+        **kwargs,
+    ):
+        start_time = time.time()
+
+        # STEP 1: Validation
+        logger.info("=" * 60)
+        logger.info("STEP 1: Validation")
+        logger.info("=" * 60)
+
+        validation_results = self._validate_configuration(
+            dataset=dataset, config=config or {}
+        )
+
+        if not all(result.is_valid for result in validation_results.values()):
+            if self.config.strict_validation:
+                raise ValueError("Validation failed. See logs for details.")
+            else:
+                logger.warning("Some validations failed but continuing...")
+
+        # STEP 2: Dataset Analysis
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 2: Dataset Analysis")
+        logger.info("=" * 60)
+
+        dataset_info = self._analyze_dataset(dataset)
+
+        # STEP 3: Search Strategy Selection
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 3: Search Strategy Selection")
+        logger.info("=" * 60)
+
+        search_strategy = self._select_search_strategy(
+            dataset_info=dataset_info, config=config or {}
+        )
+
+        # STEP 4: Hyperparameter Configuration
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 4: Hyperparameter Configuration")
+        logger.info("=" * 60)
+
+        final_config = self._prepare_config(config, dataset_info)
+
+        # STEP 5: Create & Optimize
+        logger.info("\n" + "=" * 60)
+        logger.info("STEP 5: Model Creation and Optimization")
+        logger.info("=" * 60)
+
+        auto_model = self._create_and_optimize(
+            dataset=dataset,
+            config=final_config,
+            search_strategy=search_strategy,
+            loss=loss,
+            valid_loss=valid_loss,
+            **kwargs,
+        )
+
+        elapsed_time = time.time() - start_time
+        self._record_optimization(
+            elapsed_time=elapsed_time,
+            dataset_info=dataset_info,
+            search_strategy=search_strategy,
+            final_config=final_config,
+        )
+
+        logger.info("\n" + "=" * 60)
+        logger.info("Optimization completed in %.2f seconds", elapsed_time)
+        logger.info("=" * 60)
+
+        return auto_model
+
+    def _validate_configuration(
+        self, dataset: pd.DataFrame, config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        results = validate_all(
+            backend=self.config.backend,
+            config=config,
+            num_samples=self.config.num_samples or 50,
+            cpus=self.config.cpus,
+            gpus=self.config.gpus,
+            model_class_name=self.model_name,
+            dataset=dataset,
+            h=self.h,
+            mlflow_tracking_uri=self.config.mlflow_tracking_uri,
+            mlflow_experiment_name=self.config.mlflow_experiment_name,
+            strict_mode=self.config.strict_validation,
+        )
+        if self.config.verbose:
+            print_validation_results(results)
+        return results
+
+    def _analyze_dataset(self, dataset: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze dataset: number of series, observations, avg length, exogenous flags."""
+        if isinstance(dataset, pd.DataFrame):
+            if 'unique_id' in dataset.columns:
+                try:
+                    n_series = int(dataset['unique_id'].nunique())
+                    avg_length = float(dataset.groupby('unique_id').size().mean())
+                except Exception:
+                    n_series = 1
+                    avg_length = float(len(dataset))
+            else:
+                n_series = 1
+                avg_length = float(len(dataset))
+            n_observations = int(len(dataset))
+            has_exog = any(col not in ['unique_id', 'ds', 'y'] for col in dataset.columns)
+        else:
+            n_series = 1
+            n_observations = int(len(dataset))
+            avg_length = float(n_observations)
+            has_exog = False
+
+        if n_observations < 1000:
+            dataset_size = DatasetSize.SMALL
+        elif n_observations < 100000:
+            dataset_size = DatasetSize.MEDIUM
+        else:
+            dataset_size = DatasetSize.LARGE
+
+        info = {
+            'n_series': n_series,
+            'n_observations': n_observations,
+            'avg_length': avg_length,
+            'dataset_size': dataset_size,
+            'has_exog': has_exog,
+            'columns': list(dataset.columns) if isinstance(dataset, pd.DataFrame) else []
+        }
+
+        logger.info("Dataset info:")
+        logger.info("  - Series: %s", n_series)
+        logger.info("  - Observations: %s", n_observations)
+        logger.info("  - Avg length per series: %.1f", avg_length)
+        logger.info("  - Size category: %s", dataset_size.value)
+        logger.info("  - Has exogenous variables: %s", has_exog)
+
+        return info
+
+    def _select_search_strategy(self, dataset_info: Dict[str, Any], config: Dict[str, Any]):
+        # num_samples auto if not provided
+        if self.config.num_samples is None:
+            recommended, explanation = recommend_num_samples(
+                model_complexity=self.model_char.complexity,
+                dataset_size=dataset_info['dataset_size'],
+                search_complexity=SearchComplexity.MEDIUM,
+                time_budget_hours=self.config.time_budget_hours,
+            )
+            self.config.num_samples = recommended
+            logger.info("Auto-selected num_samples: %s", explanation)
+
+        strategy = self.algorithm_selector.select_algorithm(
+            model_complexity=self.model_char.complexity,
+            dataset_size=dataset_info['dataset_size'],
+            num_samples=self.config.num_samples,
+            config=config,
+            use_pruning=self.config.use_pruning,
+            random_seed=self.config.random_seed,
+        )
+        logger.info("Selected search strategy: %s", strategy)
+        return strategy
+
+    def _prepare_config(
+        self,
+        config: Optional[Any],
+        dataset_info: Dict[str, Any],
+    ) -> Any:
+        """Return a config object suitable for the chosen backend:
+        - For backend='optuna': a function trial -> dict
+        - For backend='ray': a Ray Tune search space (dict of tune sampling expressions)
+        """
+        if config is not None:
+            return config
+
+        # dataset-driven input_size options
+        min_input, max_input = self.model_char.recommended_input_size_range
+        avg_length = dataset_info['avg_length']
+        if avg_length < min_input:
+            input_size_options = [max(2, int(avg_length * 0.5)), max(2, int(avg_length * 0.7))]
+        else:
+            input_size_options = [s for s in [min_input, (min_input + max_input)//2, max_input] if s < avg_length]
+
+        if self.config.backend == "optuna":
+            import optuna
+
+            def config_fn(trial: "optuna.Trial") -> Dict[str, Any]:
+                params: Dict[str, Any] = {
+                    "max_steps": trial.suggest_categorical("max_steps", [500, 1000, 2000, 3000]),
+                    "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True),
+                    "batch_size": trial.suggest_categorical("batch_size", [32, 64, 128, 256]),
+                    "val_check_steps": trial.suggest_categorical("val_check_steps", [50, 100, 200]),
+                    "early_stop_patience_steps": trial.suggest_categorical("early_stop_patience_steps", [2, 3, 5]),
+                }
+                if self.model_name in ["NHITS", "NBEATS"]:
+                    params.update({
+                        "n_blocks": trial.suggest_categorical("n_blocks", [[1,1,1], [2,2,2], [3,3,3]]),
+                        "mlp_units": trial.suggest_categorical("mlp_units", [[[512,512]], [[256,256]], [[128,128]]]),
+                    })
+                elif self.model_name == "TFT":
+                    params.update({
+                        "hidden_size": trial.suggest_categorical("hidden_size", [64, 128, 256]),
+                        "dropout": trial.suggest_float("dropout", 0.1, 0.3),
+                        "num_attention_heads": trial.suggest_categorical("num_attention_heads", [2, 4, 8]),
+                    })
+                elif self.model_name == "Transformer":
+                    params.update({
+                        "n_head": trial.suggest_categorical("n_head", [2, 4, 8]),
+                        "hidden_size": trial.suggest_categorical("hidden_size", [64, 128, 256]),
+                        "dropout": trial.suggest_float("dropout", 0.1, 0.3),
+                    })
+
+                if input_size_options:
+                    params["input_size"] = trial.suggest_categorical("input_size", input_size_options)
+
+                return params
+
+            logger.info("Prepared Optuna config function.")
+            return config_fn
+
+        else:
+            # Ray backend
+            from ray import tune
+            space: Dict[str, Any] = {
+                "max_steps": tune.choice([500, 1000, 2000, 3000]),
+                "learning_rate": tune.loguniform(1e-4, 1e-2),
+                "batch_size": tune.choice([32, 64, 128, 256]),
+                "val_check_steps": tune.choice([50, 100, 200]),
+                "early_stop_patience_steps": tune.choice([2, 3, 5]),
+            }
+            if self.model_name in ["NHITS", "NBEATS"]:
+                space.update({
+                    "n_blocks": tune.choice([[1,1,1], [2,2,2], [3,3,3]]),
+                    "mlp_units": tune.choice([[[512,512]], [[256,256]], [[128,128]]]),
+                })
+            elif self.model_name == "TFT":
+                space.update({
+                    "hidden_size": tune.choice([64, 128, 256]),
+                    "dropout": tune.uniform(0.1, 0.3),
+                    "num_attention_heads": tune.choice([2, 4, 8]),
+                })
+            elif self.model_name == "Transformer":
+                space.update({
+                    "n_head": tune.choice([2, 4, 8]),
+                    "hidden_size": tune.choice([64, 128, 256]),
+                    "dropout": tune.uniform(0.1, 0.3),
+                })
+
+            if input_size_options:
+                space["input_size"] = tune.choice(input_size_options)
+
+            logger.info("Prepared Ray Tune search space with %d keys.", len(space))
+            return space
+
+    def _create_and_optimize(
+        self,
+        dataset: pd.DataFrame,
+        config: Any,
+        search_strategy: Any,
+        loss: Optional[Any],
+        valid_loss: Optional[Any],
+        **kwargs,
+    ):
+        """Create the Auto* model and run the backend optimization."""
+        try:
+            from neuralforecast.auto import (
+                AutoNHITS, AutoNBEATS, AutoTFT,
+                AutoMLP, AutoDLinear, AutoTSMixer,
+                AutoPatchTST, AutoVanillaTransformer,
+            )
+        except ImportError as e:
+            logger.error("Failed to import NeuralForecast Auto models: %s", e)
+            raise
+
+        auto_model_map = {
+            "NHITS": AutoNHITS,
+            "NBEATS": AutoNBEATS,
+            "TFT": AutoTFT,
+            "MLP": AutoMLP,
+            "DLinear": AutoDLinear,
+            "TSMixer": AutoTSMixer,
+            "PatchTST": AutoPatchTST,
+            "Transformer": AutoVanillaTransformer,
+        }
+        AutoModelClass = auto_model_map.get(self.model_name)
+        if AutoModelClass is None:
+            raise ValueError(f"Auto model not found for {self.model_name}")
+
+        # Build backend search-alg object
+        if self.config.backend == "optuna":
+            import optuna
+            sampler = self.algorithm_selector.get_optuna_sampler(search_strategy)
+            pruner = self.algorithm_selector.get_optuna_pruner(search_strategy)
+            study = optuna.create_study(direction="minimize", sampler=sampler, pruner=pruner)
+            search_alg = study
+        else:
+            # Ray uses 'search_strategy' directly
+            search_alg = search_strategy
+
+        # compute n_series for logging
+        try:
+            n_series = int(dataset["unique_id"].nunique()) if isinstance(dataset, pd.DataFrame) and "unique_id" in dataset.columns else 1
+        except Exception:
+            n_series = 1
+
+        # MLflow logging block
+        if self.config.use_mlflow:
+            import mlflow
+            _parent_run = mlflow.active_run()
+            with mlflow.start_run(run_name=f"{self.model_name}_auto_optimization", nested=(_parent_run is not None)):
+                mlflow.log_params({
+                    "model_name": self.model_name,
+                    "h": self.h,
+                    "backend": self.config.backend,
+                    "num_samples": self.config.num_samples,
+                    "n_series": n_series,
+                })
+
+                auto_model = _instantiate_model(
+                    AutoModelClass,
+                    h=self.h,
+                    config=config,
+                    loss=loss,
+                    valid_loss=valid_loss,
+                    num_samples=self.config.num_samples,
+                    cpus=self.config.cpus,
+                    gpus=self.config.gpus,
+                    backend=self.config.backend,
+                    search_alg=search_alg,
+                    verbose=self.config.verbose,
+                    callbacks=self.config.callbacks,
+                    **kwargs,
+                )
+
+                logger.info("Starting optimization with %s trials...", self.config.num_samples)
+                auto_model.fit(dataset=dataset)
+
+                # optional metric logging if available
+                try:
+                    if hasattr(auto_model, "results_"):
+                        best = auto_model.results_.get_best_result()
+                        if hasattr(best, "metrics") and isinstance(best.metrics, dict):
+                            loss_val = best.metrics.get("loss", None)
+                            if loss_val is not None:
+                                mlflow.log_metric("best_loss", float(loss_val))
+                except Exception as e:
+                    logger.warning("Could not log metrics from results_: %s", e)
+        else:
+            auto_model = _instantiate_model(
+                AutoModelClass,
+                h=self.h,
+                config=config,
+                loss=loss,
+                valid_loss=valid_loss,
+                num_samples=self.config.num_samples,
+                cpus=self.config.cpus,
+                gpus=self.config.gpus,
+                backend=self.config.backend,
+                search_alg=search_alg,
+                verbose=self.config.verbose,
+                callbacks=self.config.callbacks,
+                **kwargs,
+            )
+            logger.info("Starting optimization with %s trials...", self.config.num_samples)
+            auto_model.fit(dataset=dataset)
+
+        return auto_model
+
+    def _record_optimization(
+        self,
+        elapsed_time: float,
+        dataset_info: Dict[str, Any],
+        search_strategy: Any,
+        final_config: Any,
+    ):
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "model_name": self.model_name,
+            "elapsed_time_seconds": elapsed_time,
+            "dataset_info": dataset_info,
+            "search_strategy": str(search_strategy),
+            "num_samples": self.config.num_samples,
+            "backend": self.config.backend,
+        }
+        self.optimization_history.append(record)
+        if self.config.verbose:
+            logger.info("Optimization summary:")
+            logger.info(json.dumps(record, indent=2, default=str))
+
+    def get_optimization_summary(self) -> pd.DataFrame:
+        if not self.optimization_history:
+            logger.warning("No optimization history available")
+            return pd.DataFrame()
+        return pd.DataFrame(self.optimization_history)
+
+
+def create_auto_model(
+    model_name: str,
+    h: int,
+    dataset: pd.DataFrame,
+    backend: str = "optuna",
+    num_samples: Optional[int] = None,
+    config: Optional[Any] = None,
+    cpus: int = 4,
+    gpus: int = 0,
+    use_mlflow: bool = True,
+    mlflow_experiment_name: Optional[str] = None,
+    verbose: bool = True,
+    **kwargs,
+):
+    opt_config = OptimizationConfig(
+        backend=backend,
+        num_samples=num_samples,
+        cpus=cpus,
+        gpus=gpus,
+        use_mlflow=use_mlflow,
+        mlflow_experiment_name=mlflow_experiment_name,
+        verbose=verbose,
+    )
+
+    factory = AutoModelFactory(model_name=model_name, h=h, optimization_config=opt_config)
+
+    return factory.create_auto_model(dataset=dataset, config=config, **kwargs)
