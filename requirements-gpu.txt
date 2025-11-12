@@ -1,0 +1,6 @@
+# Optional GPU stack (pin versions to your CUDA setup)
+# RAPIDS cuDF/cuML etc. are version-sensitive. Install per official docs:
+# https://rapids.ai/start.html
+# Example (commented out):
+# cudf-cu12
+# cupy-cuda12x

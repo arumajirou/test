@@ -50,7 +50,7 @@ def make_futr_from_ds(index_df: pd.DataFrame, cfg: Dict, id_col: str, ds_col: st
         for spec in fourier:
             P = int(spec.get("period", 7))
             k = int(spec.get("k", 3))
-            t = (ds.view("int64") // 10**9).astype(float)  # seconds since epoch
+            # t = (ds.view("int64") // 10**9).astype(float)  # seconds since epoch
             # Normalize t per series start to avoid huge phases
             # We'll use ordinal day to stabilize
             t = ds.map(lambda x: x.toordinal()).astype(float)

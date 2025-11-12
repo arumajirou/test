@@ -1,0 +1,8 @@
+# PostgreSQL 接続設定テンプレート
+# 値は環境変数やSecrets管理で渡してください（このファイルはコミットしない想定）
+username: "<PGUSER>"
+password: "<PGPASSWORD>"
+host: "localhost"
+port: 5432
+database: "loto"
+sslmode: "prefer"

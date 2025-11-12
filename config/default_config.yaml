@@ -1,0 +1,11 @@
+# 基本設定（頻度・列名・I/Oなど）
+freq: "D"
+id_col: "unique_id"
+ds_col: "ds"
+y_col: "y"
+
+io:
+  output_dir: "artifacts"
+
+scaler: "robust"   # none|robust|standard|minmax
+missing_handling: "ffill"  # none|ffill|bfill|interpolate|zero

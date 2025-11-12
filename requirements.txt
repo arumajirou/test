@@ -1,0 +1,20 @@
+# Core
+pandas>=2.0.0
+numpy>=1.23.0
+PyYAML>=6.0
+pydantic>=2.6.0
+loguru>=0.7.0
+
+# Feature engineering (basic)
+statsmodels>=0.14.0
+tsfresh>=0.20.1
+
+# Parallel / Orchestration (optional)
+ray[default]>=2.6.0
+
+# DB
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Nixtla utils (optional)
+utilsforecast>=0.2.6

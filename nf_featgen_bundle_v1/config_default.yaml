@@ -21,11 +21,11 @@ anomaly:
   hampel: {windows: [28], tau: 3.5}
 
 io:
-  schema: null          # 例: "public"
-  table_input: null     # 既定: db_config.TABLE_PREFIX + "loto_final"
-  table_hist: null      # 既定: db_config.TABLE_PREFIX + "features_hist"
-  table_futr: null      # 既定: db_config.TABLE_PREFIX + "features_futr"
-  write_mode: replace   # replace|append
+  schema: public                 # features_* を作るスキーマ
+  table_input: public.nf_loto_final   # ← ココを“実在名”に変更（例）
+  table_hist: features_hist
+  table_futr: features_futr
+  write_mode: replace
   chunksize: 50000
 
 parallel:

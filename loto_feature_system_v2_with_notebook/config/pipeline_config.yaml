@@ -1,0 +1,13 @@
+# パイプライン固有の設定
+features:
+  hist:
+    lags: [1, 7, 14, 30]
+    roll_mean: [7, 30]
+    roll_std: [7, 30]
+    diffs: [1, 2]
+  futr_calendar:
+    enable: true
+    fields: [year, month, day, weekday, week, quarter, is_month_start, is_month_end]
+  stat:
+    enable: true
+    fields: [unique_id_len]
